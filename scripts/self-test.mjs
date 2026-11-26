@@ -203,7 +203,7 @@ try {
   const requests = JSON.parse(await readFile(path.join(root, 'capture', 'requests.json'), 'utf8'));
   const find = suffix => requests.filter(r => new URL(r.request.url).pathname === suffix);
   for (const suffix of ['/api/example', '/api/xhr', '/api/from-worker', '/api/from-shared-worker', '/api/from-service-worker', '/api/from-frame', '/api/from-popup', '/api/upload', '/api/redirect-target', '/api/after-disconnect']) {
-    assert.ok(find(suffix).length, `Missing capture: ${suffix}`);
+    assert.ok(find(suffix).length, `Missing capture: ${suffix}; diagnostics=${JSON.stringify({ targets: summary.targets, warnings: summary.warnings, workerRequests: requests.filter(r => /worker/.test(r.request.url)).map(r => ({ url: r.request.url, type: r.targetType, state: r.state })) })}`);
   }
   for (const [suffix, expectedType] of [['/api/from-worker', 'worker'], ['/api/from-shared-worker', 'shared_worker'], ['/api/from-service-worker', 'service_worker']]) {
     assert.ok(find(suffix).some(r => r.targetType === expectedType), `Missing independent ${expectedType} target capture`);

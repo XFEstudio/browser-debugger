@@ -184,8 +184,9 @@ export class NetworkRecorder {
       return;
     }
     const setup = [];
+    let networkReady;
     if (!this.stopping) {
-      setup.push((async () => { try {
+      networkReady = (async () => { try {
         const sizes = { maxTotalBufferSize: Math.max(128 * 1024 * 1024, this.maxBodyBytes * 2), maxResourceBufferSize: Math.max(1024 * 1024, this.maxBodyBytes), maxPostDataSize: 16 * 1024 * 1024 };
         try { await this.protocol.call('Network.enable', { ...sizes, enableDurableMessages: true }, sessionId); }
         catch (error) {
@@ -197,7 +198,8 @@ export class NetworkRecorder {
       } catch (error) {
         info.networkEnabled = false;
         this.warn('network-unavailable', error, { targetId: targetInfo.targetId, type: targetInfo.type });
-      } })());
+      } })();
+      setup.push(networkReady);
       setup.push((async () => { try { await this.protocol.call('Target.setAutoAttach', childAutoAttach, sessionId); }
       catch {
         const { filter, ...fallback } = autoAttach;
@@ -205,6 +207,9 @@ export class NetworkRecorder {
         catch (error) { info.childAutoAttachError = errorText(error); }
       } })());
     }
+    // Worker scripts may fetch immediately at startup. Their Network.enable reply is
+    // available while paused, so arm it fully before releasing their first instruction.
+    if (['worker', 'shared_worker', 'service_worker'].includes(targetInfo.type)) await networkReady;
     // Always release a target, including during shutdown or after an unsupported domain.
     // A new popup can defer Network.enable's reply until its renderer is resumed.
     // Queue Network/child commands before resume, but do not await their replies first.
