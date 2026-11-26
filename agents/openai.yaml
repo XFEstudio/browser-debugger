@@ -1,0 +1,7 @@
+interface:
+  display_name: "浏览器调试与抓包"
+  short_description: "Chrome、Edge 等多浏览器自动操作、文件上传、媒体取证与跨目标网络抓包"
+  default_prompt: "使用 $browser-debugger 选择已授权的 Chrome、Edge 等浏览器会话，并从操作前开始记录网络请求、响应和 WebSocket。"
+
+policy:
+  allow_implicit_invocation: true

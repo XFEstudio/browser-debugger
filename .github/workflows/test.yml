@@ -1,0 +1,56 @@
+name: Tests
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  discovery:
+    name: Discovery (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm run test:unit
+
+  integration:
+    name: Integration (${{ matrix.browser }}, ${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            browser: chromium
+          - os: windows-latest
+            browser: chromium
+          - os: windows-latest
+            browser: chrome
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 12
+    env:
+      BROWSER_DEBUGGER_TEST_BROWSER: ${{ matrix.browser }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - if: matrix.browser == 'chromium'
+        run: npx --no-install playwright-core install --with-deps chromium
+      - if: matrix.browser == 'chrome'
+        run: npx --no-install playwright-core install chrome
+      - run: npm run test:integration

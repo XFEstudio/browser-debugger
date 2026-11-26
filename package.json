@@ -1,0 +1,19 @@
+{
+  "name": "browser-debugger-skill",
+  "version": "1.4.0",
+  "description": "Agent skill for multi-browser automation, CDP debugging and network capture",
+  "author": "XFEstudio",
+  "license": "MIT",
+  "repository": { "type": "git", "url": "https://github.com/XFEstudio/browser-debugger.git" },
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "doctor": "node scripts/browser.mjs doctor",
+    "test": "npm run test:unit && npm run test:integration",
+    "test:unit": "node --test scripts/browser-registry.test.mjs",
+    "test:integration": "node scripts/self-test.mjs && node scripts/unattended-test.mjs",
+    "test:unattended": "node scripts/unattended-test.mjs"
+  },
+  "dependencies": { "playwright-core": "1.64.1" }
+}

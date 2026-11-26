@@ -1,0 +1,13 @@
+node_modules/
+work/
+*.log
+captures/
+profiles/
+dist/
+.env
+.env.*
+!.env.example
+*.har
+storage-state*.json
+cookies*.json
+auth*.json
