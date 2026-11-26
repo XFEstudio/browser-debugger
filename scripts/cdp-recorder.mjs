@@ -171,13 +171,13 @@ export class NetworkRecorder {
     return this;
   }
 
-  async configureTarget(sessionId, targetInfo) {
-    const info = { ...targetInfo, sessionId, attachedAt: new Date().toISOString(), ready: false };
+  async configureTarget(sessionId, targetInfo, waitingForDebugger = false) {
+    const info = { ...targetInfo, sessionId, waitingForDebugger, attachedAt: new Date().toISOString(), ready: false };
     const existing = [...this.sessions.values()].find(item => item.targetId === targetInfo.targetId && !item.detachedAt && !item.duplicateOf);
     this.sessions.set(sessionId, info);
     if (existing) {
       info.duplicateOf = existing.sessionId;
-      try { await this.protocol.call('Runtime.runIfWaitingForDebugger', {}, sessionId); } catch {}
+      if (waitingForDebugger) try { await this.protocol.call('Runtime.runIfWaitingForDebugger', {}, sessionId); } catch {}
       try { await this.protocol.call('Target.detachFromTarget', { sessionId }); }
       catch (error) { info.detachError = errorText(error); }
       info.detachedAt = new Date().toISOString();
@@ -213,8 +213,10 @@ export class NetworkRecorder {
     // Always release a target, including during shutdown or after an unsupported domain.
     // A new popup can defer Network.enable's reply until its renderer is resumed.
     // Queue Network/child commands before resume, but do not await their replies first.
-    try { await this.protocol.call('Runtime.runIfWaitingForDebugger', {}, sessionId); }
-    catch (error) { info.resumeError = errorText(error); }
+    if (waitingForDebugger) {
+      try { await this.protocol.call('Runtime.runIfWaitingForDebugger', {}, sessionId); info.resumedAt = new Date().toISOString(); }
+      catch (error) { info.resumeError = errorText(error); }
+    }
     await Promise.all(setup);
     // Runtime.enable may wait for the first execution context of a paused popup.
     // Arm Network/child attachment first, resume, then enable buffered console reporting.
@@ -265,7 +267,7 @@ export class NetworkRecorder {
   handleEvent(message) {
     const { method, params: p = {}, sessionId } = message;
     if (method === 'Target.attachedToTarget') {
-      this.track(this.configureTarget(p.sessionId, p.targetInfo));
+      this.track(this.configureTarget(p.sessionId, p.targetInfo, p.waitingForDebugger));
     }
     if (method === 'Target.detachedFromTarget') {
       const info = this.sessions.get(p.sessionId);
@@ -477,7 +479,7 @@ export class NetworkRecorder {
     this.stopping = true;
     if (this.protocol.connected) {
       // Release paused children before detaching this independent recorder connection.
-      await Promise.all([...this.sessions.entries()].filter(([, info]) => !info.detachedAt).map(async ([sessionId]) => {
+      await Promise.all([...this.sessions.entries()].filter(([, info]) => !info.detachedAt && info.waitingForDebugger && !info.resumedAt).map(async ([sessionId]) => {
         try { await this.protocol.call('Runtime.runIfWaitingForDebugger', {}, sessionId, 2000); } catch {}
       }));
     }
