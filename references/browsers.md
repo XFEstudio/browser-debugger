@@ -47,4 +47,6 @@ node scripts/browser.mjs doctor --browser chromium
 
 Chrome 136 起，默认个人配置不接受普通远程调试开关。使用本技能新建的专用配置或 Chrome for Testing，不复制个人 Cookie、不重启个人窗口。企业策略、扩展和分支差异可能限制 CDP 或无头模式；记录错误、协议表和 `capture-summary.json` 的实际警告。
 
+Chrome / Chromium 在多个调试客户端同时连接时可能先恢复 SharedWorker，再完成本记录器的 Network 启用；这段启动流量不能保证补回。测试分别报告启动探针和就绪后请求，详见 [网络捕获边界](network-and-devtools.md#从操作前开始记录)。
+
 官方依据：[Playwright 浏览器与发行通道](https://playwright.dev/docs/browsers)、[自定义可执行文件兼容性](https://playwright.dev/docs/api/class-browsertype#browser-type-launch-option-executable-path)、[Chrome 远程调试配置要求](https://developer.chrome.com/blog/remote-debugging-port)。

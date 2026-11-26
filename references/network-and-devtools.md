@@ -6,6 +6,8 @@
 
 捕获器在浏览器根 WebSocket 上设置自动附加，再对子目标递归启用 Network。新目标会短暂等待调试，配置好记录后恢复。连接已有浏览器时，目标最初的请求可能已经发生，不能回补。
 
+多个调试客户端（包括 Playwright 与独立记录器）并存时，SharedWorker 的启动可能被另一客户端提前恢复。即使 attached 事件带有 waitingForDebugger，也不能保证所有启动流量发生在本记录器 Network.enable 之后；共享 Worker 脚本的完成事件和首次 fetch 可能缺失。只恢复本记录器收到 waitingForDebugger 的目标，并优先完成 Worker 的 Network 启用，可减少竞争，但不能消除浏览器端所有竞争。集成测试把立即发起的启动探针如实记入 startupCoverage，并对 Network 就绪后发起的真实 SharedWorker 请求做强制断言，不把未观察到的启动请求补造进 HAR。相关机制见 [DevTools 多会话恢复说明](https://github.com/ChromeDevTools/devtools-frontend/blob/main/front_end/core/sdk/ChildTargetManager.ts) 与 [Target 协议](https://chromedevtools.github.io/devtools-protocol/tot/Target/)。
+
 `debugSession.flush()` 生成当前快照，`close()` 停止记录并刷盘。`events.jsonl` 按到达顺序保留原始事件；`requests.json` 按 `(sessionId, requestId, hop)` 区分目标和重定向，不能只用 `requestId` 跨会话合并。
 
 Worker 脚本和跨进程 iframe 文档可能在父 session 发起、子 session 完成。helper 只在请求 ID、browser context、Worker 脚本 URL/iframe 标识匹配且仅有一个候选时关联，记录 `eventSessionIds` 和 `_collector.requestMigrated`；取 body 使用实际完成该请求的 session。无法可靠关联的事件保留在 JSONL，并在汇总的 `unmatchedHttpEvents` 中报告。

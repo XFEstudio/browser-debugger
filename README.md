@@ -11,7 +11,7 @@
 - **持续会话**：命名专用配置跨任务保留登录态，JSONL 管道持续交互；连接已有浏览器后退出只断开本工具。
 - **调试**：调用当前浏览器实际支持的 CDP 命令，保存实时协议定义；对登录、验证和访问阻塞返回明确状态。
 
-抓包范围为连接后成功启用 Network 的 CDP 目标，不保证浏览器内部、连接前或其它进程的流量。Firefox / Safari 不适用本 CDP 记录器。详见 [浏览器矩阵](references/browsers.md) 与 [捕获范围](SKILL.md#捕获范围与交付)。
+抓包范围为连接后成功启用 Network 的 CDP 目标，不保证浏览器内部、连接前或其它进程的流量。多客户端连接时 SharedWorker 的早期启动请求也可能早于 Network 启用，无法回补；测试单独报告这部分观察结果。Firefox / Safari 不适用本 CDP 记录器。详见 [浏览器矩阵](references/browsers.md) 与 [捕获范围](SKILL.md#捕获范围与交付)。
 
 ## 安装为 skill
 

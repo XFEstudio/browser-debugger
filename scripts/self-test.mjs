@@ -40,7 +40,7 @@ window.fixtureDone=false;
   await fetch('/failure').catch(()=>{});
   await new Promise(resolve=>{const xhr=new XMLHttpRequest();xhr.open('GET','/api/xhr');xhr.onload=resolve;xhr.send()});
   await new Promise(resolve=>{const worker=new Worker('/worker.js');worker.onmessage=()=>{worker.terminate();resolve()}});
-  await new Promise(resolve=>{const worker=new SharedWorker('/shared-worker.js');worker.port.onmessage=()=>{worker.port.close();resolve()};worker.port.start()});
+  await new Promise(resolve=>{const worker=new SharedWorker('/shared-worker.js');window.fixtureSharedWorker=worker;worker.port.onmessage=event=>{if(event.data.ready){window.fixtureSharedWorkerReady=true;return}worker.port.close();resolve()};worker.port.start()});
   window.fixtureStep='register-service-worker';
   const registration=await navigator.serviceWorker.register('/sw.js');
   window.fixtureStep='service-worker-ready';await navigator.serviceWorker.ready;
@@ -63,7 +63,7 @@ const server = createServer(async (request, response) => {
     const json = value => { response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'X-Response-Probe': 'response-extra-info' }); response.end(JSON.stringify(value)); };
     if (url.pathname === '/') { response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); response.end(fixture); }
     else if (url.pathname === '/worker.js') { response.setHeader('Content-Type', 'text/javascript'); response.end("fetch('/api/from-worker').then(r=>r.json()).then(data=>postMessage(data));"); }
-    else if (url.pathname === '/shared-worker.js') { response.setHeader('Content-Type', 'text/javascript'); response.end("onconnect=event=>fetch('/api/from-shared-worker').then(r=>r.json()).then(data=>event.ports[0].postMessage(data));"); }
+    else if (url.pathname === '/shared-worker.js') { response.setHeader('Content-Type', 'text/javascript'); response.end("onconnect=async event=>{const port=event.ports[0];port.onmessage=()=>fetch('/api/from-shared-worker').then(r=>r.json()).then(data=>port.postMessage(data));port.start();await fetch('/api/shared-worker-startup');port.postMessage({ready:true})};"); }
     else if (url.pathname === '/sw.js') {
       response.setHeader('Content-Type', 'text/javascript');
       response.end("self.addEventListener('install',e=>e.waitUntil(self.skipWaiting()));self.addEventListener('activate',e=>e.waitUntil(self.clients.claim()));self.addEventListener('fetch',e=>{if(new URL(e.request.url).pathname==='/sw-proxy')e.respondWith(fetch('/api/from-service-worker'))});");
@@ -108,6 +108,16 @@ try {
   console.log(`Launched local ${session.browserSelection.id} fixture; output: ${session.outputDir}`);
   const page = session.page;
   await page.goto(base, { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.fixtureSharedWorkerReady || window.fixtureError);
+  assert.equal(await page.evaluate(() => window.fixtureError ?? null), null);
+  const { targetInfos } = await session.cdp('Target.getTargets');
+  const sharedTarget = targetInfos.find(target => target.type === 'shared_worker' && target.url === `${base}/shared-worker.js`);
+  assert.ok(sharedTarget, 'SharedWorker must be a real independent CDP target.');
+  const sharedSession = await session.recorder.readyTarget(sharedTarget.targetId);
+  assert.equal(session.recorder.sessions.get(sharedSession).networkEnabled, true);
+  // A second debugger can release startup before our Network.enable. Test the
+  // guaranteed post-enable scope and report the immediate startup probe separately.
+  await page.evaluate(() => window.fixtureSharedWorker.port.postMessage('capture-after-network-ready'));
   try { await page.waitForFunction(() => window.fixtureDone || window.fixtureError, null, { timeout: 30000 }); }
   catch (error) {
     console.error('Fixture state:', await page.evaluate(() => ({ step: window.fixtureStep, error: window.fixtureError })));
@@ -209,7 +219,7 @@ try {
     assert.ok(find(suffix).some(r => r.targetType === expectedType), `Missing independent ${expectedType} target capture`);
   }
   assert.ok(find('/redirect').some(r => r.state === 'redirect' && r.response.status === 302));
-  for (const suffix of ['/worker.js', '/shared-worker.js', '/frame']) {
+  for (const suffix of ['/worker.js', '/frame']) {
     assert.ok(find(suffix).some(r => r.state === 'finished'), `Missing completion after target migration: ${suffix}`);
   }
   assert.ok(find('/failure').some(r => r.state === 'failed'));
@@ -235,6 +245,7 @@ try {
   const report = {
     passed: true, testedAt: new Date().toISOString(), browser: session.version.Browser,
     outputDir: root, requests: requests.length, targets: [...new Set(requests.map(r => r.targetType))],
+    startupCoverage: { sharedWorkerStartupCaptured: find('/api/shared-worker-startup').length > 0, sharedWorkerScriptStates: find('/shared-worker.js').map(r => r.state), note: 'Startup traffic preceding target Network.enable is best effort with multiple debugging clients; the required SharedWorker fetch is sent after recorder readiness.' },
     checks: ['multiple files', 'file chooser', 'directory upload', 'server upload response', 'download', 'screenshot', 'DOM', 'Debugger', 'raw CDP', 'existing browser attach/disconnect', 'fetch', 'XHR', 'redirect hops', 'network failure', 'response body', 'ExtraInfo headers', 'large-body omission', 'dedicated worker', 'shared worker', 'service worker', 'cross-origin iframe', 'cross-target request completion', 'popup', 'WebSocket sent/received', 'SSE', 'console', 'all-target HAR', 'native HAR', 'live protocol schema', 'nested-frame media state', 'video frames and active captions', 'media cancellation', 'empty audio placeholder filtering'],
   };
   await writeFile(path.join(root, 'test-result.json'), `${JSON.stringify(report, null, 2)}\n`, 'utf8');
